@@ -1,0 +1,98 @@
+/* Self-hosted static font files (see fonts/LICENSES/) instead of a Google
+   Fonts CDN @import -- this keeps rendering deterministic and working even
+   in network-restricted environments (sandboxes, CI, offline hosts). */
+@font-face {
+  font-family: 'Rajdhani';
+  font-style: normal;
+  font-weight: 600;
+  src: url('fonts/rajdhani-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Rajdhani';
+  font-style: normal;
+  font-weight: 700;
+  src: url('fonts/rajdhani-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  src: url('fonts/space-mono-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 700;
+  src: url('fonts/space-mono-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  src: url('fonts/inter-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  src: url('fonts/inter-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  src: url('fonts/inter-latin-600-normal.woff2') format('woff2');
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { background: transparent; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  width: 400px;
+}
+
+.card {
+  --accent: #38bdf8;
+  --bg: #0a1018;
+  width: 100%;
+  border-radius: 10px;
+  position: relative;
+  padding: 18px 18px 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--bg);
+}
+.card::before {
+  content: '';
+  position: absolute; inset: 0; border-radius: 10px;
+  background-image: radial-gradient(circle, var(--accent) 1px, transparent 1px);
+  background-size: 20px 20px;
+  opacity: 0.05;
+  pointer-events: none;
+}
+.corner { position: absolute; width: 12px; height: 12px; opacity: 0.5; }
+.corner-tl { top: 8px; left: 8px; border-top: 1.5px solid var(--accent); border-left: 1.5px solid var(--accent); }
+.corner-tr { top: 8px; right: 8px; border-top: 1.5px solid var(--accent); border-right: 1.5px solid var(--accent); }
+.corner-bl { bottom: 8px; left: 8px; border-bottom: 1.5px solid var(--accent); border-left: 1.5px solid var(--accent); }
+.corner-br { bottom: 8px; right: 8px; border-bottom: 1.5px solid var(--accent); border-right: 1.5px solid var(--accent); }
+
+.card-inner { position: relative; z-index: 1; }
+
+.eyebrow {
+  display: flex; justify-content: space-between;
+  font-size: 8.5px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 16px;
+}
+
+.sec-label {
+  font-size: 8px; letter-spacing: 2px; text-transform: uppercase;
+  color: #4d5158; margin-bottom: 9px;
+}
+
+.footer {
+  display: flex; justify-content: space-between;
+  font-family: 'Space Mono', monospace; font-size: 8px; color: #454951;
+  margin-top: 14px; padding-top: 11px; border-top: 1px solid rgba(255,255,255,0.05);
+}

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+{% include "_shared.css.jinja" %}
+
+.spotlight-eyebrow { text-align: center; font-size: 9px; letter-spacing: 2px; color: #565a61; margin-top: 6px; margin-bottom: 10px; text-transform: uppercase; }
+.spotlight-title {
+  text-align: center; font-family: 'Rajdhani', sans-serif; font-weight: 700;
+  font-size: 27px; letter-spacing: 0.5px; color: #eaf6ff; margin-bottom: 6px;
+}
+.spotlight-rank {
+  text-align: center; font-family: 'Space Mono', monospace; font-size: 12px;
+  color: var(--accent); margin-bottom: 16px;
+}
+.spotlight-desc {
+  text-align: center; font-size: 11.5px; color: #8a8f98; line-height: 1.65;
+  margin-bottom: 18px; padding: 0 6px;
+}
+.contrast-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 10px; color: #565a61; padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.contrast-row b { color: #9aa0a8; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="card-inner">
+    <div class="eyebrow"><span>Rarest Favorite</span><span>{{ user_tag }}</span></div>
+
+    <div class="spotlight-eyebrow">your deepest cut</div>
+    <div class="spotlight-title">{{ title|upper }}</div>
+    <div class="spotlight-rank">{{ rank_text }} &middot; popularity rank</div>
+    <div class="spotlight-desc">{{ description }}</div>
+
+    <div class="contrast-row">
+      <span>Most popular favorite</span>
+      <b>{{ most_popular_title }} &middot; {{ most_popular_rank_text }}</b>
+    </div>
+
+    <div class="footer"><span>AniList &middot; {{ username }}</span><span>issued {{ issued_date }}</span></div>
+  </div>
+  <div class="corner corner-tl"></div><div class="corner corner-tr"></div>
+  <div class="corner corner-bl"></div><div class="corner corner-br"></div>
+</div>
+
+</body>
+</html>

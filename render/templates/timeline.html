@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+{% include "_shared.css.jinja" %}
+
+.timeline-wrap { position: relative; padding-left: 18px; margin-top: 4px; }
+.timeline-line { position: absolute; left: 4px; top: 4px; bottom: 4px; width: 1.5px; background: rgba(255,255,255,0.08); }
+.era-node { position: relative; margin-bottom: 17px; }
+.era-node:last-child { margin-bottom: 4px; }
+.era-dot { position: absolute; left: -18px; top: 3px; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 3px #0a1018; }
+.era-years { font-family: 'Space Mono', monospace; font-size: 8.5px; color: #565a61; }
+.era-name { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 15px; color: #e2e8f0; margin: 2px 0 3px; }
+.era-node.current .era-name { color: var(--accent); }
+.era-titles { font-size: 9.5px; color: #6b6f76; }
+.now-tag {
+  position: absolute; right: 0; top: 2px; font-size: 7px; letter-spacing: 1px;
+  color: var(--accent); border: 1px solid var(--accent); padding: 1.5px 5px; border-radius: 2px;
+}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="card-inner">
+    <div class="eyebrow"><span>Taste Timeline</span><span>{{ year_range }}</span></div>
+
+    <div class="timeline-wrap">
+      <div class="timeline-line"></div>
+
+      {% for era in eras %}
+      <div class="era-node{{ ' current' if era.current else '' }}">
+        <div class="era-dot" style="background:{{ era.color }}"></div>
+        {% if era.current %}<div class="now-tag">NOW</div>{% endif %}
+        <div class="era-years">{{ era.start_year }}{% if era.end_year != era.start_year %} &ndash; {{ era.end_year }}{% endif %}</div>
+        <div class="era-name">{{ era.label }}</div>
+        <div class="era-titles">{{ era.titles|join(', ') }}</div>
+      </div>
+      {% endfor %}
+
+    </div>
+
+    <div class="footer"><span>AniList &middot; {{ username }}</span><span>issued {{ issued_date }}</span></div>
+  </div>
+  <div class="corner corner-tl"></div><div class="corner corner-tr"></div>
+  <div class="corner corner-bl"></div><div class="corner corner-br"></div>
+</div>
+
+</body>
+</html>
