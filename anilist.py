@@ -5,6 +5,8 @@ fetches everything all three slash commands need in one HTTP round trip:
 the user's favourite anime (with popularity rankings) and their full
 anime list collection (scores, completion dates, genres).
 """
+import json
+
 import aiohttp
 
 ANILIST_URL = "https://graphql.anilist.co"
@@ -84,7 +86,18 @@ async def fetch_user_bundle(username: str) -> dict:
             timeout=aiohttp.ClientTimeout(total=20),
         ) as resp:
             status = resp.status
-            payload = await resp.json()
+            raw_body = await resp.text()
+
+    # Read the body as text and parse it ourselves rather than resp.json():
+    # AniList outages/maintenance pages sometimes serve an error body with a
+    # non-JSON content-type header (or no JSON at all), and aiohttp's
+    # strict content-type check on .json() would raise an unhandled
+    # ContentTypeError in that case instead of a clean AniListError.
+    try:
+        payload = json.loads(raw_body)
+    except ValueError:
+        snippet = raw_body.strip()[:200] or "(empty response body)"
+        raise AniListError(f"AniList returned a non-JSON response (HTTP {status}): {snippet}")
 
     errors = payload.get("errors")
     if errors:

@@ -84,6 +84,16 @@ layout without needing a Discord connection at all:
 python scripts/preview.py <anilist_username> [output_dir]
 ```
 
+## Tests
+
+`anilist.py`'s error handling (non-JSON/error responses from AniList) is
+covered by mocked unit tests that need no network access:
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
 ## Tuning the scoring
 
 - **`scoring.py`**: the `/taste` distinctiveness formula and its
@@ -111,7 +121,10 @@ render/
     timeline.html
 scripts/
   preview.py              Local PNG preview without Discord
+tests/
+  test_anilist.py         Mocked unit tests for AniList error handling
 requirements.txt
+requirements-dev.txt
 .env.example
 ```
 
