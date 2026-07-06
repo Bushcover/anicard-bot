@@ -68,13 +68,27 @@ rather than dummy data:
   `select_popularity_ranking`/`describe_ranking_scope` now surface that
   scope explicitly, so `/rarest` shows e.g. "#10 · 2005 TV popularity
   rank" instead of a bare, misleading "#10".
-- `/timeline`'s era labels are picked from each era's single most
-  frequent genre, which can tie or repeat between adjacent eras and
-  undercut the point of a timeline (showing an arc of change).
-  `timeline_logic.py` now tries each era's next-most-frequent genre
-  first when it would otherwise repeat its immediate predecessor's
-  label, and only merges two eras together when no distinct alternative
-  genre exists at all.
+- `/timeline`'s era labels are picked from each era's genre distribution.
+  Labelling on a single dominant genre could tie or repeat between eras
+  and undercut the point of a timeline (showing an arc of change). An
+  early fix avoided the immediately preceding era's genre, but that
+  could still collide two eras later (a label ping-ponging back after a
+  detour) and could force a technically-distinct but less representative
+  runner-up genre even when the true top genre clearly dominated.
+  `timeline_logic.py` now labels each era from its own distribution
+  alone: a clearly dominant genre (more than `BLEND_GAP_THRESHOLD`
+  percentage points ahead of the runner-up) gets a single-genre label as
+  before; a close top two blend into one label, e.g. "Comedy & Romance
+  Era". This is more honest (it reflects real signal instead of picking
+  one genre to look different) and collides far less often in practice,
+  since the exact pair -- and which genre led -- has to match. Two eras
+  with a genuinely identical distribution (no secondary genre at all)
+  are still merged into one rather than repeating a label.
+- Confirmed against a third real profile that "unranked · no popularity
+  rank on AniList" in `/rarest` is a genuine data gap, not the rankings
+  bug above recurring: a direct query showed the title had real `RATED`
+  rankings but no `POPULAR`-type ranking at all, so `select_popularity_
+  ranking`'s `type == "POPULAR"` filter correctly found nothing.
 
 The "No. 000000002"-style serial number on each card is the AniList
 profile's own real, immutable numeric user ID (zero-padded for the

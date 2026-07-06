@@ -2,18 +2,30 @@
 
 Entries are grouped by year, or by 2-year buckets when the user's
 completion history spans more than 4 distinct years (keeps the timeline
-readable for long-time AniList users). Each era is labelled after its
-most-frequent genre via a fixed genre -> phrase lookup table, falling
-back to a plain "{Genre} Era" template. Fully deterministic and free --
+readable for long-time AniList users). Fully deterministic and free --
 no external calls of any kind.
 
-If two consecutive eras would end up with the same label (their dominant
-genre ties or repeats), that undercuts the point of a timeline -- showing
-an arc of change. When that happens we first try the era's next-most
-frequent genre instead (a real secondary signal from the same data);
-if there's no distinct genre to fall back to, the two eras are merged
-into one longer block instead of rendering two identical labels back to
-back.
+Each era's label is picked from its genre distribution alone, independent
+of neighboring eras:
+
+- If the top genre clearly dominates the runner-up (more than
+  BLEND_GAP_THRESHOLD percentage points of the era's entries), the label
+  is that single genre's flavor phrase (e.g. "Comic Relief").
+- Otherwise the top two genres are close enough that picking just one
+  would overstate how one-note the era actually was, so the label blends
+  both, e.g. "Comedy & Romance Era".
+
+An earlier version tried to keep adjacent eras visually distinct by
+avoiding whichever single genre the previous era used, falling back to a
+weaker runner-up genre purely to look different. That's technically
+distinct but less honest -- it can pick a genre that covered a minority
+of the era's entries just to avoid a repeat. The blend reflects more of
+the real signal instead, and as a side effect two eras collide on a label
+far less often, since the exact pair (and its order, which follows which
+genre led) has to match rather than just a single genre. Two eras with a
+genuinely identical distribution (no secondary signal at all, e.g. every
+single entry tagged only "Drama") can still land on the same label; that
+case is merged into one longer era rather than rendered twice.
 """
 from collections import Counter, defaultdict
 
@@ -40,68 +52,66 @@ GENRE_FLAVOR = {
 
 ERA_COLORS = ["#f87171", "#38bdf8", "#fbbf24", "#a78bfa", "#34d399", "#fb923c"]
 
+# How many percentage points (of the era's entry count) the top genre
+# must lead the runner-up by by to get a single-genre label. Below this,
+# the two genres are close enough that a blended label is more honest.
+BLEND_GAP_THRESHOLD = 18
+
 
 def era_label(genre: str) -> str:
     return GENRE_FLAVOR.get(genre, f"{genre} Era")
 
 
-def _top_genre(genre_counter: Counter, avoid: set) -> str | None:
-    """Most frequent genre in `genre_counter`, preferring one not in
-    `avoid` if such an alternative exists. Returns None if the counter is
-    empty."""
-    for genre, _ in genre_counter.most_common():
-        if genre not in avoid:
-            return genre
-    top = genre_counter.most_common(1)
-    return top[0][0] if top else None
+def _label_for_era(genre_counter: Counter, total_entries: int) -> str:
+    ranked = genre_counter.most_common()
+    if not ranked:
+        return "Anime Era"
+
+    top_genre, top_count = ranked[0]
+    if len(ranked) == 1:
+        return era_label(top_genre)
+
+    second_genre, second_count = ranked[1]
+    gap = 100 * (top_count - second_count) / total_entries
+    if gap > BLEND_GAP_THRESHOLD:
+        return era_label(top_genre)
+    return f"{top_genre} & {second_genre} Era"
 
 
-def _merge_ties(raw_eras: list[dict]) -> list[dict]:
-    """Collapse consecutive eras whose dominant genre would otherwise
-    repeat, trying a secondary genre first and only merging the two eras
-    together when no distinct alternative exists.
-
-    Each era's chosen `genre` is stored on the era dict as it's decided
-    (avoiding the immediately preceding era's genre) rather than being
-    recomputed later, since recomputing from the raw counter without that
-    `avoid` context would silently undo the disambiguation."""
+def _merge_adjacent_duplicate_labels(raw_eras: list[dict]) -> list[dict]:
+    """Each era's label is computed from its own genre distribution alone.
+    That makes two eras colliding on a label rare, but a genuinely
+    identical distribution (no secondary genre at all) can still repeat
+    the immediately preceding label -- merge those together rather than
+    rendering the same label twice in a row."""
     eras: list[dict] = []
     for raw in raw_eras:
         era = {
             "start_year": raw["start_year"],
             "end_year": raw["end_year"],
             "genre_counter": Counter(raw["genre_counter"]),
+            "total_entries": raw["total_entries"],
             "titles": list(raw["titles"]),
         }
-        avoid = {eras[-1]["genre"]} if eras and eras[-1]["genre"] else set()
-        era["genre"] = _top_genre(era["genre_counter"], avoid)
+        era["label"] = _label_for_era(era["genre_counter"], era["total_entries"])
         eras.append(era)
 
         # Cascade: merging can make the combined era tie the one before
         # it too, so keep resolving backwards until neighbors differ.
-        while len(eras) >= 2:
-            prev, cur = eras[-2], eras[-1]
-            if prev["genre"] is None or cur["genre"] is None or cur["genre"] != prev["genre"]:
-                break
-
-            # No distinct secondary genre available for `cur` -- it's a
-            # continuation of the same dominant taste, not a new era.
+        while len(eras) >= 2 and eras[-1]["label"] == eras[-2]["label"]:
+            cur = eras.pop()
+            prev = eras[-1]
             prev["end_year"] = cur["end_year"]
             prev["genre_counter"].update(cur["genre_counter"])
+            prev["total_entries"] += cur["total_entries"]
             for title in cur["titles"]:
                 if title not in prev["titles"] and len(prev["titles"]) < 2:
                     prev["titles"].append(title)
-            eras.pop()
-
-            # prev's counter just grew, so its best genre may have
-            # changed -- recompute it against *its* predecessor's genre.
-            avoid = {eras[-2]["genre"]} if len(eras) >= 2 and eras[-2]["genre"] else set()
-            prev["genre"] = _top_genre(prev["genre_counter"], avoid)
+            prev["label"] = _label_for_era(prev["genre_counter"], prev["total_entries"])
 
     for era in eras:
-        era["label"] = era_label(era["genre"]) if era["genre"] else "Anime Era"
         del era["genre_counter"]
-        del era["genre"]
+        del era["total_entries"]
 
     return eras
 
@@ -143,11 +153,12 @@ def build_eras(entries: list[tuple[int, list[str], str]]) -> list[dict]:
                 "start_year": start_year,
                 "end_year": end_year,
                 "genre_counter": genre_counter,
+                "total_entries": len(items),
                 "titles": seen_titles,
             }
         )
 
-    eras = _merge_ties(raw_eras)
+    eras = _merge_adjacent_duplicate_labels(raw_eras)
 
     for i, era in enumerate(eras):
         era["color"] = ERA_COLORS[i % len(ERA_COLORS)]
