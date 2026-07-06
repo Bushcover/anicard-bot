@@ -86,9 +86,21 @@ python bot.py
 ```
 
 On startup the bot launches its headless Chromium instance, logs in, and
-syncs its three slash commands globally (global sync can take up to an
-hour to propagate to Discord's client the first time — invite the bot to
-a test server and it usually shows up much sooner).
+syncs its three slash commands globally by default (global sync can take
+up to an hour to propagate to Discord's client the first time).
+
+For local testing, set `DISCORD_TEST_GUILD_ID` in `.env` to a test
+server's guild ID and the bot will sync commands to that server only,
+instantly, instead of globally:
+
+```bash
+# in .env
+DISCORD_TEST_GUILD_ID=123456789012345678
+```
+
+(Enable Developer Mode in Discord's settings, then right-click the
+server icon and "Copy Server ID" to get this.) Remove or comment out
+`DISCORD_TEST_GUILD_ID` to go back to the global-sync default.
 
 ## Previewing cards without Discord
 

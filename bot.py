@@ -26,6 +26,11 @@ log = logging.getLogger("anicard")
 
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 
+# Optional: set to a test server's guild ID to sync slash commands there
+# instantly instead of globally (global sync can take up to an hour to
+# propagate). Leave unset for normal global sync.
+TEST_GUILD_ID = os.environ.get("DISCORD_TEST_GUILD_ID")
+
 # Personal-score display units, keyed by AniList's user-level scoreFormat.
 SCORE_UNIT = {
     "POINT_100": "/100",
@@ -134,8 +139,14 @@ async def on_ready():
     log.info("Logged in as %s (%s)", bot.user, bot.user.id if bot.user else "?")
     await renderer.start()
     try:
-        synced = await bot.tree.sync()
-        log.info("Synced %d slash commands", len(synced))
+        if TEST_GUILD_ID:
+            guild = discord.Object(id=int(TEST_GUILD_ID))
+            bot.tree.copy_global_to(guild=guild)
+            synced = await bot.tree.sync(guild=guild)
+            log.info("Synced %d slash commands to test guild %s", len(synced), TEST_GUILD_ID)
+        else:
+            synced = await bot.tree.sync()
+            log.info("Synced %d slash commands globally", len(synced))
     except Exception:
         log.exception("Failed to sync slash commands")
 
