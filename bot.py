@@ -156,11 +156,13 @@ def build_taste_context(data: dict, favourites: list[scoring.ScoredFavourite]) -
     """Raises ValueError if there's not enough ranked data (see scoring.compute_taste)."""
     result = scoring.compute_taste(favourites)
     user = data["User"]
+    sample_size = result["sample_size"]
     return {
         "score": result["score"],
         "archetype": result["archetype"],
         "archetype_blurb": result["archetype_blurb"],
         "driven_by": result["driven_by"],
+        "sample_note": f"based on {sample_size} favorite{'s' if sample_size != 1 else ''}",
         "user_tag": user_tag(user["id"]),
         "username": user["name"],
         "issued_date": issued_date(),
@@ -193,8 +195,10 @@ def build_rarest_context(data: dict, favourites: list[scoring.ScoredFavourite], 
         "rank_text": rank_text,
         "scope_label": scope_label,
         "description": description,
-        "most_popular_title": popular.title,
-        "most_popular_rank_text": f"#{popular.rank:,}" if popular.rank else "unranked",
+        # None when the rarest favourite is the only (distinct) one --
+        # contrasting it against itself would be meaningless.
+        "most_popular_title": popular.title if popular else None,
+        "most_popular_rank_text": (f"#{popular.rank:,}" if popular.rank else "unranked") if popular else None,
         "issued_date": issued_date(),
     }
 

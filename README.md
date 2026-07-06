@@ -88,6 +88,20 @@ and is shared between the live bot and `scripts/preview.py`, so the two
 can't silently drift out of sync the way a second hand-copied
 implementation could.
 
+Testing against a second, much sparser real profile (1 favourite, 1
+year of history) surfaced two more honesty gaps, since a small sample
+still rendered as confidently as a large one:
+
+- `/rarest` showed a "most popular favorite" contrast row comparing the
+  rarest favourite to itself whenever there were fewer than 2 distinct
+  favourites (or they all tied on popularity). `rarest_logic.compute_rarest`
+  now returns `most_popular: None` in that case, and the card shows "Add
+  more favorites for a comparison" instead of a trivial self-contrast.
+- `/taste`'s gauge and archetype looked equally confident regardless of
+  how many favourites backed them. `scoring.compute_taste` now exposes
+  `sample_size`, and the card prints a small "based on N favorite(s)"
+  note under the archetype blurb.
+
 ## Setup
 
 ```bash

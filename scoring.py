@@ -76,4 +76,8 @@ def compute_taste(favourites: list[ScoredFavourite]) -> dict:
         "archetype": name,
         "archetype_blurb": blurb,
         "driven_by": driven_by,
+        # Exposed so the card can be honest about how much data backs the
+        # score -- a score from 1 favourite isn't as confident as one from
+        # 17, and the gauge/archetype alone don't convey that.
+        "sample_size": len(ranked),
     }
