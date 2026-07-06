@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 import rarest_logic
 import scoring
 import timeline_logic
-from anilist import AniListError, UserNotFoundError, fetch_user_bundle
+from anilist import AniListError, AniListOverloadedError, UserNotFoundError, fetch_user_bundle
 from render.renderer import CardRenderer
 
 load_dotenv()
@@ -122,6 +122,8 @@ async def fetch_bundle_or_notify(interaction: discord.Interaction, username: str
             f"Couldn't find an AniList user named **{username}**. Double-check the spelling.",
             ephemeral=True,
         )
+    except AniListOverloadedError as e:
+        await interaction.followup.send(str(e), ephemeral=True)
     except AniListError as e:
         await interaction.followup.send(f"AniList API error: {e}", ephemeral=True)
     return None

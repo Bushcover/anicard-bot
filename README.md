@@ -16,18 +16,23 @@ username) and looks that profile up live.
 
 ## How it works
 
-1. `anilist.py` sends one combined GraphQL query to AniList's public API
-   (`https://graphql.anilist.co`, no auth needed) per command, fetching
-   both the user's favourites (with popularity rankings) and their full
-   anime list (scores, completion dates, genres).
+1. `anilist.py` talks to AniList's public API (`https://graphql.anilist.co`,
+   no auth needed). One combined query fetches the user's favourites and
+   their full anime list (scores, completion dates, genres); a second
+   query fetches those favourites' popularity rankings, since AniList's
+   `rankings` field reliably returns `null` when queried nested under
+   `User.favourites.anime.nodes` and only resolves on a direct
+   `Page.media(id_in:)` query (confirmed against the live API). Duplicate
+   favourite entries -- AniList can list the same anime more than once in
+   a user's favourites connection -- are also collapsed to one each here.
 2. `scoring.py`, `rarest_logic.py`, and `timeline_logic.py` turn that raw
    data into each command's specific numbers/labels.
 3. `render/renderer.py` feeds the result into a Jinja2 HTML template
    (`render/templates/*.html`) that reproduces the visual design from
    `anicard_command_carousel.html` (Rajdhani/Space Mono/Inter, dark card,
    corner brackets, dot texture), loads it in a headless Chromium tab via
-   Playwright, waits for the Google Fonts to finish loading, and
-   screenshots just the `.card` element to a transparent PNG.
+   Playwright, waits for the fonts to finish loading, and screenshots
+   just the `.card` element to a transparent PNG.
 4. `bot.py` wires all of that into three `discord.py` slash commands and
    sends the PNG back as a file attachment.
 
@@ -39,6 +44,17 @@ in network-restricted environments, and was verified by checking
 `document.fonts` in the headless page after render (not just eyeballing
 the screenshot) to confirm the real families load rather than silently
 falling back to system defaults.
+
+`aiohttp.ClientSession` is created with `trust_env=True` so it honors
+`HTTP_PROXY`/`HTTPS_PROXY` from the environment -- aiohttp ignores those
+by default, which otherwise silently breaks outbound requests in any
+proxied environment (sandboxes, some corporate networks).
+
+AniList's own API documents a 403 "temporarily disabled due to severe
+stability issues" response that it returns under heavy load. This is
+expected, recurring behavior on their end, not a bug -- `anilist.py`
+detects it specifically (`AniListOverloadedError`) and the bot replies
+with a friendly "try again in a bit" message instead of a generic error.
 
 ## Setup
 
