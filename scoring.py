@@ -51,6 +51,12 @@ def archetype_for(score: float) -> tuple[str, str]:
 class ScoredFavourite:
     title: str
     rank: int | None
+    # Human-readable scope of `rank` (e.g. "all-time" or "2006 TV") --
+    # AniList only computes an all-time rank for sufficiently popular
+    # titles, so obscure favourites often only have a narrow year/format
+    # -scoped rank, which reads as contradictory ("#10") unless its scope
+    # is shown alongside it. See bot.py's describe_ranking_scope().
+    rank_scope: str | None
     popularity: int | None
     personal_score: int | None
     obscurity: float

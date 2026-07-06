@@ -56,6 +56,38 @@ expected, recurring behavior on their end, not a bug -- `anilist.py`
 detects it specifically (`AniListOverloadedError`) and the bot replies
 with a friendly "try again in a bit" message instead of a generic error.
 
+Two more things found by testing against real, well-populated profiles
+rather than dummy data:
+
+- AniList only computes an **all-time** popularity ranking for
+  sufficiently popular titles. A genuinely obscure favourite often only
+  has a narrow year/format-scoped ranking snapshot instead (e.g. "10th
+  most popular TV anime of 2005"), and showing that bare number next to
+  a low raw popularity count read as contradictory ("#10" looks like a
+  top-10-all-time hit, not a rare pick). `bot.py`'s
+  `select_popularity_ranking`/`describe_ranking_scope` now surface that
+  scope explicitly, so `/rarest` shows e.g. "#10 · 2005 TV popularity
+  rank" instead of a bare, misleading "#10".
+- `/timeline`'s era labels are picked from each era's single most
+  frequent genre, which can tie or repeat between adjacent eras and
+  undercut the point of a timeline (showing an arc of change).
+  `timeline_logic.py` now tries each era's next-most-frequent genre
+  first when it would otherwise repeat its immediate predecessor's
+  label, and only merges two eras together when no distinct alternative
+  genre exists at all.
+
+The "No. 000000002"-style serial number on each card is the AniList
+profile's own real, immutable numeric user ID (zero-padded for the
+trading-card aesthetic) -- not a render counter. `matchai`, used while
+testing, really is AniList's 2nd-ever registered account.
+
+The per-command context-building logic (turning fetched data + scores
+into the dict each template renders) lives in `bot.py`'s
+`build_taste_context` / `build_rarest_context` / `build_timeline_context`
+and is shared between the live bot and `scripts/preview.py`, so the two
+can't silently drift out of sync the way a second hand-copied
+implementation could.
+
 ## Setup
 
 ```bash

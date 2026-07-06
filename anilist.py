@@ -71,6 +71,7 @@ query ($ids: [Int]) {
         type
         format
         allTime
+        year
         context
       }
     }
