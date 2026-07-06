@@ -33,6 +33,11 @@ def compute_rarest(favourites: list[ScoredFavourite]) -> dict:
 
     rarest = min(with_pop, key=lambda f: f.popularity)
     most_popular = max(with_pop, key=lambda f: f.popularity)
+    # With only one (distinct) favourite, "rarest" and "most popular" are
+    # the exact same entry -- a contrast against itself is meaningless, so
+    # signal that there's nothing to contrast rather than showing it.
+    if most_popular is rarest:
+        most_popular = None
 
     return {
         "rarest": rarest,

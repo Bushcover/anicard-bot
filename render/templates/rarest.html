@@ -24,6 +24,7 @@
   border-top: 1px solid rgba(255,255,255,0.05);
 }
 .contrast-row b { color: #9aa0a8; font-weight: 500; }
+.contrast-row.contrast-row--empty { display: block; text-align: center; }
 </style>
 </head>
 <body>
@@ -34,13 +35,19 @@
 
     <div class="spotlight-eyebrow">your deepest cut</div>
     <div class="spotlight-title">{{ title|upper }}</div>
-    <div class="spotlight-rank">{{ rank_text }} &middot; popularity rank</div>
+    <div class="spotlight-rank">{{ rank_text }} &middot; {{ scope_label }}</div>
     <div class="spotlight-desc">{{ description }}</div>
 
+    {% if most_popular_title %}
     <div class="contrast-row">
       <span>Most popular favorite</span>
       <b>{{ most_popular_title }} &middot; {{ most_popular_rank_text }}</b>
     </div>
+    {% else %}
+    <div class="contrast-row contrast-row--empty">
+      <span>Add more favorites for a comparison</span>
+    </div>
+    {% endif %}
 
     <div class="footer"><span>AniList &middot; {{ username }}</span><span>issued {{ issued_date }}</span></div>
   </div>

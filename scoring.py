@@ -51,6 +51,12 @@ def archetype_for(score: float) -> tuple[str, str]:
 class ScoredFavourite:
     title: str
     rank: int | None
+    # Human-readable scope of `rank` (e.g. "all-time" or "2006 TV") --
+    # AniList only computes an all-time rank for sufficiently popular
+    # titles, so obscure favourites often only have a narrow year/format
+    # -scoped rank, which reads as contradictory ("#10") unless its scope
+    # is shown alongside it. See bot.py's describe_ranking_scope().
+    rank_scope: str | None
     popularity: int | None
     personal_score: int | None
     obscurity: float
@@ -70,4 +76,8 @@ def compute_taste(favourites: list[ScoredFavourite]) -> dict:
         "archetype": name,
         "archetype_blurb": blurb,
         "driven_by": driven_by,
+        # Exposed so the card can be honest about how much data backs the
+        # score -- a score from 1 favourite isn't as confident as one from
+        # 17, and the gauge/archetype alone don't convey that.
+        "sample_size": len(ranked),
     }

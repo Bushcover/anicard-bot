@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 import rarest_logic
 import scoring
 import timeline_logic
-from anilist import AniListError, UserNotFoundError, fetch_user_bundle
+from anilist import AniListError, AniListOverloadedError, UserNotFoundError, fetch_user_bundle
 from render.renderer import CardRenderer
 
 load_dotenv()
@@ -26,6 +26,11 @@ log = logging.getLogger("anicard")
 
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 
+# Optional: set to a test server's guild ID to sync slash commands there
+# instantly instead of globally (global sync can take up to an hour to
+# propagate). Leave unset for normal global sync.
+TEST_GUILD_ID = os.environ.get("DISCORD_TEST_GUILD_ID")
+
 # Personal-score display units, keyed by AniList's user-level scoreFormat.
 SCORE_UNIT = {
     "POINT_100": "/100",
@@ -33,6 +38,17 @@ SCORE_UNIT = {
     "POINT_10": "/10",
     "POINT_5": "/5",
     "POINT_3": "",
+}
+
+# AniList MediaFormat enum values -> short display labels.
+FORMAT_LABELS = {
+    "TV": "TV",
+    "TV_SHORT": "TV Short",
+    "MOVIE": "Movie",
+    "SPECIAL": "Special",
+    "OVA": "OVA",
+    "ONA": "ONA",
+    "MUSIC": "Music",
 }
 
 intents = discord.Intents.default()
@@ -44,16 +60,36 @@ def extract_title(title_obj: dict) -> str:
     return (title_obj or {}).get("english") or (title_obj or {}).get("romaji") or "Unknown"
 
 
-def pick_popularity_rank(rankings: list[dict]) -> int | None:
-    """Prefer the overall (format-unrestricted) all-time popularity rank;
-    fall back to any all-time POPULAR ranking, then any POPULAR ranking."""
+def select_popularity_ranking(rankings: list[dict]) -> dict | None:
+    """Prefer the overall (format-unrestricted) all-time popularity ranking;
+    fall back to any all-time POPULAR ranking, then any POPULAR ranking at
+    all. Returns the whole ranking dict (not just the rank number) so
+    callers can show what scope that number actually measures -- AniList
+    only computes an all-time ranking for sufficiently popular titles, so
+    a genuinely obscure favourite often only has a narrow year/format
+    -scoped ranking, and showing that number without its scope reads as
+    contradictory (e.g. "#10" looks like a top-10 hit, not a rare pick)."""
     candidates = [r for r in rankings if r.get("type") == "POPULAR" and r.get("allTime")]
     overall = [r for r in candidates if r.get("format") is None]
     chosen = overall[0] if overall else (candidates[0] if candidates else None)
     if chosen is None:
         popular_any = [r for r in rankings if r.get("type") == "POPULAR"]
         chosen = popular_any[0] if popular_any else None
-    return chosen["rank"] if chosen else None
+    return chosen
+
+
+def describe_ranking_scope(ranking: dict | None) -> str | None:
+    """Human-readable scope for a ranking dict, e.g. "all-time TV" or
+    "2006 TV". Returns None if there's no ranking to describe."""
+    if ranking is None:
+        return None
+    format_label = FORMAT_LABELS.get(ranking.get("format"), ranking.get("format"))
+    if ranking.get("allTime"):
+        return f"all-time {format_label}" if format_label else "all-time"
+    parts = [str(ranking["year"])] if ranking.get("year") else []
+    if format_label:
+        parts.append(format_label)
+    return " ".join(parts) if parts else "recent"
 
 
 def build_score_lookup(data: dict) -> dict[int, int]:
@@ -73,11 +109,13 @@ def build_favourites(data: dict, score_lookup: dict[int, int]) -> list[scoring.S
     nodes = data.get("User", {}).get("favourites", {}).get("anime", {}).get("nodes", [])
     favourites = []
     for node in nodes:
-        rank = pick_popularity_rank(node.get("rankings") or [])
+        ranking = select_popularity_ranking(node.get("rankings") or [])
+        rank = ranking["rank"] if ranking else None
         favourites.append(
             scoring.ScoredFavourite(
                 title=extract_title(node.get("title")),
                 rank=rank,
+                rank_scope=describe_ranking_scope(ranking),
                 popularity=node.get("popularity"),
                 personal_score=score_lookup.get(node["id"]),
                 obscurity=scoring.obscurity_score(rank) if rank else 0.0,
@@ -114,6 +152,69 @@ def issued_date() -> str:
     return date.today().strftime("%d %b %Y").lower()
 
 
+def build_taste_context(data: dict, favourites: list[scoring.ScoredFavourite]) -> dict:
+    """Raises ValueError if there's not enough ranked data (see scoring.compute_taste)."""
+    result = scoring.compute_taste(favourites)
+    user = data["User"]
+    sample_size = result["sample_size"]
+    return {
+        "score": result["score"],
+        "archetype": result["archetype"],
+        "archetype_blurb": result["archetype_blurb"],
+        "driven_by": result["driven_by"],
+        "sample_note": f"based on {sample_size} favorite{'s' if sample_size != 1 else ''}",
+        "user_tag": user_tag(user["id"]),
+        "username": user["name"],
+        "issued_date": issued_date(),
+    }
+
+
+def build_rarest_context(data: dict, favourites: list[scoring.ScoredFavourite], score_format: str) -> dict:
+    """Raises ValueError if there's no popularity data at all (see rarest_logic.compute_rarest)."""
+    result = rarest_logic.compute_rarest(favourites)
+    rare = result["rarest"]
+    popular = result["most_popular"]
+    user = data["User"]
+
+    if rare.rank:
+        rank_text = f"#{rare.rank:,}"
+        scope_label = f"{rare.rank_scope} popularity rank" if rare.rank_scope else "popularity rank"
+    else:
+        rank_text = "unranked"
+        scope_label = "no popularity rank on AniList"
+
+    description = f"Only ~{rare.popularity:,} users have this on their list — {result['comparison']}."
+    personal = format_personal_score(rare.personal_score, score_format)
+    if personal:
+        description += f" You rated it {personal}."
+
+    return {
+        "user_tag": user_tag(user["id"]),
+        "username": user["name"],
+        "title": rare.title,
+        "rank_text": rank_text,
+        "scope_label": scope_label,
+        "description": description,
+        # None when the rarest favourite is the only (distinct) one --
+        # contrasting it against itself would be meaningless.
+        "most_popular_title": popular.title if popular else None,
+        "most_popular_rank_text": (f"#{popular.rank:,}" if popular.rank else "unranked") if popular else None,
+        "issued_date": issued_date(),
+    }
+
+
+def build_timeline_context(data: dict, entries: list[tuple[int, list[str], str]]) -> dict:
+    """Raises ValueError if there are no dated completed entries (see timeline_logic.build_eras)."""
+    eras = timeline_logic.build_eras(entries)
+    user = data["User"]
+    return {
+        "username": user["name"],
+        "year_range": f"{eras[0]['start_year']} — {eras[-1]['end_year']}",
+        "eras": eras,
+        "issued_date": issued_date(),
+    }
+
+
 async def fetch_bundle_or_notify(interaction: discord.Interaction, username: str) -> dict | None:
     try:
         return await fetch_user_bundle(username)
@@ -122,6 +223,8 @@ async def fetch_bundle_or_notify(interaction: discord.Interaction, username: str
             f"Couldn't find an AniList user named **{username}**. Double-check the spelling.",
             ephemeral=True,
         )
+    except AniListOverloadedError as e:
+        await interaction.followup.send(str(e), ephemeral=True)
     except AniListError as e:
         await interaction.followup.send(f"AniList API error: {e}", ephemeral=True)
     return None
@@ -132,8 +235,14 @@ async def on_ready():
     log.info("Logged in as %s (%s)", bot.user, bot.user.id if bot.user else "?")
     await renderer.start()
     try:
-        synced = await bot.tree.sync()
-        log.info("Synced %d slash commands", len(synced))
+        if TEST_GUILD_ID:
+            guild = discord.Object(id=int(TEST_GUILD_ID))
+            bot.tree.copy_global_to(guild=guild)
+            synced = await bot.tree.sync(guild=guild)
+            log.info("Synced %d slash commands to test guild %s", len(synced), TEST_GUILD_ID)
+        else:
+            synced = await bot.tree.sync()
+            log.info("Synced %d slash commands globally", len(synced))
     except Exception:
         log.exception("Failed to sync slash commands")
 
@@ -149,7 +258,7 @@ async def taste(interaction: discord.Interaction, username: str):
     score_lookup = build_score_lookup(data)
     favourites = build_favourites(data, score_lookup)
     try:
-        result = scoring.compute_taste(favourites)
+        context = build_taste_context(data, favourites)
     except ValueError:
         await interaction.followup.send(
             f"**{username}** doesn't have enough favourites with popularity data to compute a taste signature.",
@@ -157,16 +266,6 @@ async def taste(interaction: discord.Interaction, username: str):
         )
         return
 
-    user = data["User"]
-    context = {
-        "score": result["score"],
-        "archetype": result["archetype"],
-        "archetype_blurb": result["archetype_blurb"],
-        "driven_by": result["driven_by"],
-        "user_tag": user_tag(user["id"]),
-        "username": user["name"],
-        "issued_date": issued_date(),
-    }
     png = await renderer.render("taste.html", context)
     await interaction.followup.send(file=discord.File(io.BytesIO(png), filename="taste.png"))
 
@@ -184,7 +283,7 @@ async def rarest(interaction: discord.Interaction, username: str):
     score_lookup = build_score_lookup(data)
     favourites = build_favourites(data, score_lookup)
     try:
-        result = rarest_logic.compute_rarest(favourites)
+        context = build_rarest_context(data, favourites, score_format)
     except ValueError:
         await interaction.followup.send(
             f"**{username}** doesn't have any favourites with popularity data.",
@@ -192,24 +291,6 @@ async def rarest(interaction: discord.Interaction, username: str):
         )
         return
 
-    rare = result["rarest"]
-    popular = result["most_popular"]
-
-    description = f"Only ~{rare.popularity:,} users have this on their list — {result['comparison']}."
-    personal = format_personal_score(rare.personal_score, score_format)
-    if personal:
-        description += f" You rated it {personal}."
-
-    context = {
-        "user_tag": user_tag(user["id"]),
-        "username": user["name"],
-        "title": rare.title,
-        "rank_text": f"#{rare.rank:,}" if rare.rank else "unranked",
-        "description": description,
-        "most_popular_title": popular.title,
-        "most_popular_rank_text": f"#{popular.rank:,}" if popular.rank else "unranked",
-        "issued_date": issued_date(),
-    }
     png = await renderer.render("rarest.html", context)
     await interaction.followup.send(file=discord.File(io.BytesIO(png), filename="rarest.png"))
 
@@ -224,7 +305,7 @@ async def timeline(interaction: discord.Interaction, username: str):
 
     entries = build_completed_entries(data)
     try:
-        eras = timeline_logic.build_eras(entries)
+        context = build_timeline_context(data, entries)
     except ValueError:
         await interaction.followup.send(
             f"**{username}** doesn't have any completed anime with dates on AniList.",
@@ -232,13 +313,6 @@ async def timeline(interaction: discord.Interaction, username: str):
         )
         return
 
-    user = data["User"]
-    context = {
-        "username": user["name"],
-        "year_range": f"{eras[0]['start_year']} — {eras[-1]['end_year']}",
-        "eras": eras,
-        "issued_date": issued_date(),
-    }
     png = await renderer.render("timeline.html", context)
     await interaction.followup.send(file=discord.File(io.BytesIO(png), filename="timeline.png"))
 
